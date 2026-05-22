@@ -202,30 +202,16 @@ export function UploadBar({
 
       {previewUrl && <img className="preview" src={previewUrl} alt="预览" />}
 
-      {image && (
-        <div className={`ocr-box ${ocrPassed ? "pass" : ocrFailed ? "fail" : ""}`}>
-          {ocrStatus === "loading" && "正在加载文字识别引擎(首次约 5-10 秒,之后缓存)..."}
+      {image && ocrStatus !== "idle" && !ocrPassed && (
+        <div className={`ocr-box ${ocrFailed ? "fail" : ""}`}>
+          {ocrStatus === "loading" &&
+            "正在加载文字识别引擎(首次约 5-10 秒,之后缓存)..."}
           {ocrStatus === "recognizing" && "正在识别图中文字..."}
-          {ocrStatus === "done" && ocrPassed && <>✓ 检测通过</>}
           {ocrStatus === "done" && !ocrPassed && (
-            <>⚠ 检测未通过,提交后需要管理员审核</>
+            <>⚠ 本地识别未通过,提交后将调用 AI 进一步识别,请稍候...</>
           )}
           {ocrStatus === "failed" && (
-            <>OCR 失败,会跳过审核(管理员会看到标记)</>
-          )}
-          {ocrStatus === "done" && (
-            <details style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
-              <summary style={{ cursor: "pointer" }}>查看 OCR 识别结果</summary>
-              <pre
-                style={{
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                  margin: "6px 0 0",
-                }}
-              >
-                {ocrText.slice(0, 500) || "(空)"}
-              </pre>
-            </details>
+            <>本地 OCR 失败,提交后将由 AI 识别,请稍候...</>
           )}
         </div>
       )}
