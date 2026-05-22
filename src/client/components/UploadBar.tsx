@@ -206,11 +206,9 @@ export function UploadBar({
         <div className={`ocr-box ${ocrPassed ? "pass" : ocrFailed ? "fail" : ""}`}>
           {ocrStatus === "loading" && "正在加载文字识别引擎(首次约 5-10 秒,之后缓存)..."}
           {ocrStatus === "recognizing" && "正在识别图中文字..."}
-          {ocrStatus === "done" && ocrPassed && (
-            <>✓ 检测到「需要等级」</>
-          )}
+          {ocrStatus === "done" && ocrPassed && <>✓ 检测通过</>}
           {ocrStatus === "done" && !ocrPassed && (
-            <>⚠ 未检测到「需要等级」,提交后需要管理员审核</>
+            <>⚠ 检测未通过,提交后需要管理员审核</>
           )}
           {ocrStatus === "failed" && (
             <>OCR 失败,会跳过审核(管理员会看到标记)</>
