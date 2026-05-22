@@ -155,7 +155,7 @@ async function dashscopeOcr(
             },
           ],
         }),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(60000),
       }
     );
 

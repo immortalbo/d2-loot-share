@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createWorker, type Worker as TesseractWorker } from "tesseract.js";
 import { uploadItem } from "../api";
+import { compressImage } from "../imageCompress";
 import { reviewOcrText } from "../../shared/d2-keywords";
 import {
   CATEGORIES,
@@ -24,6 +25,17 @@ export function UploadBar({
 }) {
   const [image, setImage] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
+
+  async function acceptImage(blob: Blob) {
+    setCompressing(true);
+    try {
+      const compressed = await compressImage(blob);
+      setImage(compressed);
+    } finally {
+      setCompressing(false);
+    }
+  }
   const [itemName, setItemName] = useState("");
   const [note, setNote] = useState("");
   const [category, setCategory] = useState<Category | "">("");
@@ -60,7 +72,7 @@ export function UploadBar({
       );
       if (item) {
         const file = item.getAsFile();
-        if (file) setImage(file);
+        if (file) acceptImage(file);
       }
     }
     window.addEventListener("paste", onPaste);
@@ -113,7 +125,7 @@ export function UploadBar({
     const file = Array.from(e.dataTransfer.files).find((f) =>
       f.type.startsWith("image/")
     );
-    if (file) setImage(file);
+    if (file) acceptImage(file);
   }
 
   function toggleClass(cls: CharClass) {
@@ -195,14 +207,17 @@ export function UploadBar({
           style={{ display: "none" }}
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) setImage(f);
+            if (f) acceptImage(f);
           }}
         />
       </div>
 
       {previewUrl && <img className="preview" src={previewUrl} alt="预览" />}
 
-      {image && ocrStatus !== "idle" && !ocrPassed && (
+      {compressing && (
+        <div className="ocr-box">正在压缩图片(几乎无损,只为加速上传)...</div>
+      )}
+      {image && !compressing && ocrStatus !== "idle" && !ocrPassed && (
         <div className={`ocr-box ${ocrFailed ? "fail" : ""}`}>
           {ocrStatus === "loading" &&
             "正在加载文字识别引擎(首次约 5-10 秒,之后缓存)..."}
