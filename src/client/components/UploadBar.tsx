@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { createWorker, type Worker as TesseractWorker } from "tesseract.js";
 import { uploadItem } from "../api";
 import { compressImage } from "../imageCompress";
-import { reviewOcrText } from "../../shared/d2-keywords";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -26,16 +24,6 @@ export function UploadBar({
   const [image, setImage] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [compressing, setCompressing] = useState(false);
-
-  async function acceptImage(blob: Blob) {
-    setCompressing(true);
-    try {
-      const compressed = await compressImage(blob);
-      setImage(compressed);
-    } finally {
-      setCompressing(false);
-    }
-  }
   const [itemName, setItemName] = useState("");
   const [note, setNote] = useState("");
   const [category, setCategory] = useState<Category | "">("");
@@ -47,12 +35,15 @@ export function UploadBar({
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // OCR 状态
-  const workerRef = useRef<TesseractWorker | null>(null);
-  const [ocrText, setOcrText] = useState<string>("");
-  const [ocrStatus, setOcrStatus] = useState<
-    "idle" | "loading" | "recognizing" | "done" | "failed"
-  >("idle");
+  async function acceptImage(blob: Blob) {
+    setCompressing(true);
+    try {
+      const compressed = await compressImage(blob);
+      setImage(compressed);
+    } finally {
+      setCompressing(false);
+    }
+  }
 
   useEffect(() => {
     if (!image) {
@@ -77,46 +68,6 @@ export function UploadBar({
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, []);
-
-  // image 变化时跑 OCR
-  useEffect(() => {
-    let cancelled = false;
-    setOcrText("");
-    if (!image) {
-      setOcrStatus("idle");
-      return;
-    }
-    (async () => {
-      try {
-        if (!workerRef.current) {
-          setOcrStatus("loading");
-          workerRef.current = await createWorker("chi_sim+eng");
-        }
-        if (cancelled) return;
-        setOcrStatus("recognizing");
-        const ret = await workerRef.current.recognize(image);
-        if (cancelled) return;
-        const text = ret.data.text || "";
-        setOcrText(text);
-        setOcrStatus("done");
-      } catch (err) {
-        if (cancelled) return;
-        setOcrText(`OCR 失败: ${String(err).slice(0, 100)}`);
-        setOcrStatus("failed");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [image]);
-
-  // 卸载时关闭 worker
-  useEffect(() => {
-    return () => {
-      workerRef.current?.terminate();
-      workerRef.current = null;
-    };
   }, []);
 
   function onDrop(e: React.DragEvent) {
@@ -151,7 +102,6 @@ export function UploadBar({
         quality: quality || null,
         classes,
         image,
-        ocr_text: ocrText || undefined,
       });
       onUploaded(item);
       setImage(null);
@@ -160,15 +110,13 @@ export function UploadBar({
       setCategory("");
       setQuality("");
       setClasses([]);
-      setOcrText("");
-      setOcrStatus("idle");
 
       if (item.ai_review === "suspicious") {
         setInfo(
-          "已提交,但 OCR 未在图中检测到装备特征,可能不是装备截图,需要管理员审核后才会展示给其他人。"
+          "已提交,但 AI 未识别为装备截图,需要管理员审核后才会展示给其他人。"
         );
       } else {
-        setInfo("提交成功 ✓");
+        setInfo("发布成功 ✓");
       }
       setTimeout(() => setInfo(null), 8000);
     } catch (err) {
@@ -177,9 +125,6 @@ export function UploadBar({
       setUploading(false);
     }
   }
-
-  const ocrPassed = ocrStatus === "done" && reviewOcrText(ocrText).ok;
-  const ocrFailed = ocrStatus === "done" && !ocrPassed;
 
   return (
     <div
@@ -215,19 +160,11 @@ export function UploadBar({
       {previewUrl && <img className="preview" src={previewUrl} alt="预览" />}
 
       {compressing && (
-        <div className="ocr-box">正在压缩图片(几乎无损,只为加速上传)...</div>
+        <div className="ocr-box">正在处理图片...</div>
       )}
-      {image && !compressing && ocrStatus !== "idle" && !ocrPassed && (
-        <div className={`ocr-box ${ocrFailed ? "fail" : ""}`}>
-          {ocrStatus === "loading" &&
-            "正在加载文字识别引擎(首次约 5-10 秒,之后缓存)..."}
-          {ocrStatus === "recognizing" && "正在识别图中文字..."}
-          {ocrStatus === "done" && !ocrPassed && (
-            <>⚠ 本地识别未通过,提交后将调用 AI 进一步识别,请稍候...</>
-          )}
-          {ocrStatus === "failed" && (
-            <>本地 OCR 失败,提交后将由 AI 识别,请稍候...</>
-          )}
+      {uploading && (
+        <div className="ocr-box">
+          正在审核(AI 识别约 3-5 秒,请稍候)...
         </div>
       )}
 
@@ -240,7 +177,7 @@ export function UploadBar({
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="备注 / 属性(可选)"
+          placeholder="备注(可选;留空会用图中识别出的属性自动填充)"
         />
       </div>
 
@@ -287,9 +224,9 @@ export function UploadBar({
         <button
           className="primary"
           onClick={submit}
-          disabled={uploading || !image}
+          disabled={uploading || compressing || !image}
         >
-          {uploading ? "上传中..." : "发布"}
+          {uploading ? "审核中..." : "发布"}
         </button>
       </div>
 

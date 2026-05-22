@@ -190,13 +190,38 @@ async function dashscopeOcr(
   }
 }
 
-// 综合审核:优先用阿里云;失败时降级到客户端 Tesseract 的 ocr_text
+// 从 OCR 文本提取「需要等级」之后的属性词条
+function extractDescription(ocrText: string): string {
+  if (!ocrText) return "";
+  // 匹配「需要等级:NN」这一行的位置;m 标志保证按行匹配
+  const m = ocrText.match(/需\s*要\s*等\s*级[^\n\r]*/);
+  if (!m || m.index === undefined) return "";
+  const after = ocrText.slice(m.index + m[0].length);
+  return after
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    // 去掉常见杂质:Shift 卸装提示、空行、纯标点行
+    .filter(
+      (l) =>
+        l &&
+        !/Shift\s*\+|左键点击|卸装|装备|=Shift=/.test(l) &&
+        !/^[\s\W_]+$/.test(l)
+    )
+    .join("\n")
+    .trim();
+}
+
+// 综合审核:优先用阿里云;失败时降级到客户端的 ocr_text
 async function reviewItem(
   env: Env,
   bytes: Uint8Array,
   mimeType: string,
   clientOcrText: string
-): Promise<{ ok: boolean; reason: string }> {
+): Promise<{
+  ok: boolean;
+  reason: string;
+  description: string; // 从 OCR 文本提取的属性词条
+}> {
   let serverText = "";
   let serverError: string | undefined;
   if (env.DASHSCOPE_API_KEY) {
@@ -213,11 +238,13 @@ async function reviewItem(
     : clientOcrText
     ? "tesseract"
     : "none";
+  const description = extractDescription(effective);
 
   if (!effective) {
     return {
       ok: false,
       reason: `no OCR text (server ${serverError || "skipped"}, client empty)`,
+      description: "",
     };
   }
 
@@ -226,6 +253,7 @@ async function reviewItem(
     return {
       ok: true,
       reason: `[${source}] matched "${r.matched}". Text: ${snip}`,
+      description,
     };
   }
   return {
@@ -233,6 +261,7 @@ async function reviewItem(
     reason: `[${source}] no keyword matched. Text: ${snip}${
       serverError ? ` (server err: ${serverError})` : ""
     }`,
+    description,
   };
 }
 
@@ -259,6 +288,9 @@ app.post("/api/items", async (c) => {
   const ai_review = review.ok ? "approved" : "suspicious";
   const ai_review_reason = review.reason;
 
+  // 用户没填 note 时,用 OCR 提取的属性词条自动填充
+  const finalNote = note || (review.description || null);
+
   // Cloudflare 自动注入真实客户端 IP
   const ip =
     c.req.header("CF-Connecting-IP") ||
@@ -281,7 +313,7 @@ app.post("/api/items", async (c) => {
     .bind(
       nickname,
       itemName,
-      note,
+      finalNote,
       key,
       category,
       quality,
