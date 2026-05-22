@@ -108,16 +108,7 @@ app.get("/api/items", async (c) => {
   return c.json({ items: results.map((r) => shapeItem(r, origin, role)) });
 });
 
-// 暗黑2装备 tooltip 关键词(中/英),前端 OCR 文字命中即视为装备
-const D2_KEYWORDS = [
-  "需要等级",
-  "等级要求",
-  "需要力量",
-  "需要敏捷",
-  "Required Level",
-  "Required Strength",
-  "Required Dexterity",
-];
+import { reviewOcrText } from "../shared/d2-keywords";
 
 function reviewByOcrText(ocrText: string): {
   ok: boolean;
@@ -126,23 +117,12 @@ function reviewByOcrText(ocrText: string): {
   if (!ocrText) {
     return { ok: false, reason: "OCR text empty (client may have skipped)" };
   }
-  const matched = D2_KEYWORDS.find((k) =>
-    new RegExp(k.replace(/\s+/g, "\\s*"), "i").test(ocrText)
-  );
-  if (matched) {
-    return {
-      ok: true,
-      reason: `OCR keyword matched: "${matched}". Text: ${ocrText
-        .replace(/\s+/g, " ")
-        .slice(0, 120)}`,
-    };
+  const r = reviewOcrText(ocrText);
+  const textSnip = ocrText.replace(/\s+/g, " ").slice(0, 200);
+  if (r.ok) {
+    return { ok: true, reason: `matched "${r.matched}". OCR: ${textSnip}` };
   }
-  return {
-    ok: false,
-    reason: `OCR text has no D2 keyword. Text: ${ocrText
-      .replace(/\s+/g, " ")
-      .slice(0, 200)}`,
-  };
+  return { ok: false, reason: `no D2 keyword matched. OCR: ${textSnip}` };
 }
 
 // 上传装备截图

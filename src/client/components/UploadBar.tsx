@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createWorker, type Worker as TesseractWorker } from "tesseract.js";
 import { uploadItem } from "../api";
+import { reviewOcrText } from "../../shared/d2-keywords";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -13,23 +14,6 @@ import {
   type Item,
   type Quality,
 } from "../../shared/types";
-
-// 暗黑2装备 tooltip 常见关键词(中/英),匹配上认为是装备截图
-const D2_KEYWORDS = [
-  "需要等级",
-  "等级要求",
-  "需要力量",
-  "需要敏捷",
-  "Required Level",
-  "Required Strength",
-  "Required Dexterity",
-];
-
-function hasD2Keyword(text: string): boolean {
-  return D2_KEYWORDS.some((k) =>
-    new RegExp(k.replace(/\s+/g, "\\s*"), "i").test(text)
-  );
-}
 
 export function UploadBar({
   nickname,
@@ -182,7 +166,7 @@ export function UploadBar({
     }
   }
 
-  const ocrPassed = ocrStatus === "done" && hasD2Keyword(ocrText);
+  const ocrPassed = ocrStatus === "done" && reviewOcrText(ocrText).ok;
   const ocrFailed = ocrStatus === "done" && !ocrPassed;
 
   return (
@@ -223,13 +207,27 @@ export function UploadBar({
           {ocrStatus === "loading" && "正在加载文字识别引擎(首次约 5-10 秒,之后缓存)..."}
           {ocrStatus === "recognizing" && "正在识别图中文字..."}
           {ocrStatus === "done" && ocrPassed && (
-            <>✓ 检测到装备特征(命中关键词)</>
+            <>✓ 检测到「需要等级」</>
           )}
           {ocrStatus === "done" && !ocrPassed && (
-            <>⚠ 未检测到装备特征,管理员会看到「可疑」标记</>
+            <>⚠ 未检测到「需要等级」,提交后需要管理员审核</>
           )}
           {ocrStatus === "failed" && (
             <>OCR 失败,会跳过审核(管理员会看到标记)</>
+          )}
+          {ocrStatus === "done" && (
+            <details style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+              <summary style={{ cursor: "pointer" }}>查看 OCR 识别结果</summary>
+              <pre
+                style={{
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                  margin: "6px 0 0",
+                }}
+              >
+                {ocrText.slice(0, 500) || "(空)"}
+              </pre>
+            </details>
           )}
         </div>
       )}
