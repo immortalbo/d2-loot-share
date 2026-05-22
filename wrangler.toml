@@ -1,0 +1,25 @@
+name = "d2-loot-share"
+main = "src/server/index.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 部署完成后,把构建产物 dist/client 作为静态资源
+[assets]
+directory = "./dist/client"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# D1 数据库绑定(创建数据库后填入 database_id)
+[[d1_databases]]
+binding = "DB"
+database_name = "wow-loot-share-db"
+database_id = "b50b1914-a209-42c6-adc1-29c7feeaae18"
+
+# R2 存储桶绑定(创建桶后无需填 id,直接绑名字)
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "wow-loot-images"
+
+# 本地开发用 vars,生产请用 `wrangler secret put SHARE_PASSWORD`
+[vars]
+# SHARE_PASSWORD 不要在这里写,用 secret 命令存
