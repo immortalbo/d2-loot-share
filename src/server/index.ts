@@ -8,6 +8,7 @@ type Env = {
   AI: Ai;
   SHARE_PASSWORD: string;
   ADMIN_PASSWORD?: string;
+  DASHSCOPE_API_KEY?: string;
 };
 
 type ItemRow = {
@@ -110,19 +111,129 @@ app.get("/api/items", async (c) => {
 
 import { reviewOcrText } from "../shared/d2-keywords";
 
-function reviewByOcrText(ocrText: string): {
-  ok: boolean;
-  reason: string;
-} {
-  if (!ocrText) {
-    return { ok: false, reason: "OCR text empty (client may have skipped)" };
+// Uint8Array → base64(分块,避免 fromCharCode 栈溢出)
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + chunk))
+    );
   }
-  const r = reviewOcrText(ocrText);
-  const textSnip = ocrText.replace(/\s+/g, " ").slice(0, 200);
+  return btoa(binary);
+}
+
+// 调阿里云 Qwen-VL-OCR 识别图中文字
+async function dashscopeOcr(
+  apiKey: string,
+  bytes: Uint8Array,
+  mimeType: string
+): Promise<{ text: string; error?: string }> {
+  try {
+    const dataUrl = `data:${mimeType || "image/png"};base64,${bytesToBase64(bytes)}`;
+    const resp = await fetch(
+      "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "qwen-vl-ocr-latest",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image_url", image_url: { url: dataUrl } },
+                {
+                  type: "text",
+                  text: "Read all text in this image. Output the raw text only.",
+                },
+              ],
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(20000),
+      }
+    );
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      return {
+        text: "",
+        error: `dashscope http ${resp.status}: ${err.slice(0, 200)}`,
+      };
+    }
+    const data = (await resp.json()) as {
+      choices?: { message?: { content?: string | unknown[] } }[];
+    };
+    const content = data.choices?.[0]?.message?.content;
+    // OpenAI 兼容模式可能返回 string 或 [{type:'text',text:'...'}]
+    let text = "";
+    if (typeof content === "string") text = content;
+    else if (Array.isArray(content)) {
+      for (const part of content) {
+        if (
+          typeof part === "object" &&
+          part &&
+          "text" in (part as Record<string, unknown>)
+        ) {
+          text += String((part as { text?: string }).text || "");
+        }
+      }
+    }
+    return { text };
+  } catch (err) {
+    return { text: "", error: `dashscope: ${String(err).slice(0, 200)}` };
+  }
+}
+
+// 综合审核:优先用阿里云;失败时降级到客户端 Tesseract 的 ocr_text
+async function reviewItem(
+  env: Env,
+  bytes: Uint8Array,
+  mimeType: string,
+  clientOcrText: string
+): Promise<{ ok: boolean; reason: string }> {
+  let serverText = "";
+  let serverError: string | undefined;
+  if (env.DASHSCOPE_API_KEY) {
+    const r = await dashscopeOcr(env.DASHSCOPE_API_KEY, bytes, mimeType);
+    serverText = r.text;
+    serverError = r.error;
+  }
+
+  // 优先用服务端 OCR;为空/失败则用客户端的
+  const effective = serverText || clientOcrText;
+  const snip = effective.replace(/\s+/g, " ").slice(0, 200);
+  const source = serverText
+    ? "dashscope"
+    : clientOcrText
+    ? "tesseract"
+    : "none";
+
+  if (!effective) {
+    return {
+      ok: false,
+      reason: `no OCR text (server ${serverError || "skipped"}, client empty)`,
+    };
+  }
+
+  const r = reviewOcrText(effective);
   if (r.ok) {
-    return { ok: true, reason: `matched "${r.matched}". OCR: ${textSnip}` };
+    return {
+      ok: true,
+      reason: `[${source}] matched "${r.matched}". Text: ${snip}`,
+    };
   }
-  return { ok: false, reason: `no D2 keyword matched. OCR: ${textSnip}` };
+  return {
+    ok: false,
+    reason: `[${source}] no keyword matched. Text: ${snip}${
+      serverError ? ` (server err: ${serverError})` : ""
+    }`,
+  };
 }
 
 // 上传装备截图
@@ -144,7 +255,7 @@ app.post("/api/items", async (c) => {
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const review = reviewByOcrText(ocrText);
+  const review = await reviewItem(c.env, bytes, file.type || "image/png", ocrText);
   const ai_review = review.ok ? "approved" : "suspicious";
   const ai_review_reason = review.reason;
 
