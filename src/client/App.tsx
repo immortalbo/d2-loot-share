@@ -280,6 +280,10 @@ export function App() {
 
       {error && <div className="error">{error}</div>}
 
+      <div className="footer-notice">
+        ⚠ 仅供群友开荒互助 · 免费赠送 · 禁止任何形式交易 · 内容由发布者负责
+      </div>
+
       {filteredItems.length === 0 ? (
         <div className="empty">
           {items.length === 0
