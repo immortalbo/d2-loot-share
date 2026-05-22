@@ -16,16 +16,27 @@ import {
   type Quality,
 } from "../shared/types";
 
-type TabKey = "all" | "mine" | "claimed_by_me" | "done";
+type TabKey =
+  | "all"
+  | "mine"
+  | "claimed_by_me"
+  | "done"
+  | "admin_all"
+  | "admin_suspicious"
+  | "admin_deleted";
 
 const TAB_LABELS: Record<TabKey, string> = {
   all: "全部",
   mine: "我发布的",
   claimed_by_me: "我领取的",
   done: "已领完",
+  admin_all: "全部条目",
+  admin_suspicious: "可疑",
+  admin_deleted: "已删",
 };
 
-const TABS: TabKey[] = ["all", "mine", "claimed_by_me", "done"];
+const USER_TABS: TabKey[] = ["all", "mine", "claimed_by_me", "done"];
+const ADMIN_TABS: TabKey[] = ["admin_all", "admin_suspicious", "admin_deleted"];
 
 export function App() {
   const [auth, setAuth] = useState(() => loadAuth());
@@ -39,11 +50,13 @@ export function App() {
   const [filterQuality, setFilterQuality] = useState<Quality | "">("");
   const [filterClass, setFilterClass] = useState<CharClass | "">("");
 
+  const isAdmin = auth?.role === "admin";
+
   async function refresh() {
     setLoading(true);
     setError(null);
     try {
-      const list = await fetchItems();
+      const list = await fetchItems(isAdmin);
       setItems(list);
     } catch (err) {
       const msg = String(err);
@@ -70,19 +83,27 @@ export function App() {
     clearAuth();
     setAuth(null);
     setItems([]);
+    setTab("all");
   }
 
   // 按 tab + 筛选计算列表
   const filteredItems = useMemo(() => {
     if (!auth) return [];
     return items.filter((it) => {
-      // tab 过滤
+      // 普通 tab: 不展示已删除
+      if (USER_TABS.includes(tab) && it.deleted_at) return false;
+
       if (tab === "mine" && it.nickname !== auth.nickname) return false;
       if (tab === "claimed_by_me" && it.claimed_by !== auth.nickname)
         return false;
       if (tab === "done" && !it.claimed_by) return false;
-      // 全部 tab 默认隐藏已领取的(除非要看 done)
       if (tab === "all" && it.claimed_by) return false;
+
+      // admin tab
+      if (tab === "admin_suspicious" && it.ai_review !== "suspicious")
+        return false;
+      if (tab === "admin_deleted" && !it.deleted_at) return false;
+      // admin_all 显示全部(不过滤)
 
       // 维度筛选
       if (filterCategory && it.category !== filterCategory) return false;
@@ -95,13 +116,27 @@ export function App() {
 
   // 统计每个 tab 的数量
   const counts = useMemo(() => {
-    if (!auth) return { all: 0, mine: 0, claimed_by_me: 0, done: 0 };
+    const base = {
+      all: 0,
+      mine: 0,
+      claimed_by_me: 0,
+      done: 0,
+      admin_all: 0,
+      admin_suspicious: 0,
+      admin_deleted: 0,
+    };
+    if (!auth) return base;
+    const live = items.filter((it) => !it.deleted_at);
     return {
-      all: items.filter((it) => !it.claimed_by).length,
-      mine: items.filter((it) => it.nickname === auth.nickname).length,
-      claimed_by_me: items.filter((it) => it.claimed_by === auth.nickname)
+      all: live.filter((it) => !it.claimed_by).length,
+      mine: live.filter((it) => it.nickname === auth.nickname).length,
+      claimed_by_me: live.filter((it) => it.claimed_by === auth.nickname)
         .length,
-      done: items.filter((it) => !!it.claimed_by).length,
+      done: live.filter((it) => !!it.claimed_by).length,
+      admin_all: items.length,
+      admin_suspicious: items.filter((it) => it.ai_review === "suspicious")
+        .length,
+      admin_deleted: items.filter((it) => !!it.deleted_at).length,
     };
   }, [items, auth]);
 
@@ -114,11 +149,15 @@ export function App() {
   }
 
   const hasFilter = filterCategory || filterQuality || filterClass;
+  const visibleTabs = isAdmin ? [...USER_TABS, ...ADMIN_TABS] : USER_TABS;
 
   return (
     <div className="app">
       <div className="header">
-        <h1>公会装备共享</h1>
+        <h1>
+          公会装备共享
+          {isAdmin && <span className="admin-badge">ADMIN</span>}
+        </h1>
         <div className="user">
           <span>
             你是{" "}
@@ -137,10 +176,12 @@ export function App() {
       />
 
       <div className="tabs">
-        {TABS.map((k) => (
+        {visibleTabs.map((k) => (
           <button
             key={k}
-            className={`tab ${tab === k ? "active" : ""}`}
+            className={`tab ${tab === k ? "active" : ""} ${
+              ADMIN_TABS.includes(k) ? "tab-admin" : ""
+            }`}
             onClick={() => setTab(k)}
           >
             {TAB_LABELS[k]}
@@ -211,6 +252,7 @@ export function App() {
               key={item.id}
               item={item}
               currentNickname={auth.nickname}
+              isAdmin={isAdmin}
               onChanged={(updated) =>
                 setItems((prev) =>
                   prev.map((x) => (x.id === updated.id ? updated : x))

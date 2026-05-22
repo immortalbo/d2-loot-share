@@ -16,12 +16,12 @@ export function Login({ onLogin }: { onLogin: (nickname: string) => void }) {
     setLoading(true);
     setError(null);
     try {
-      const ok = await verifyPassword(password);
-      if (!ok) {
+      const { ok, role } = await verifyPassword(password);
+      if (!ok || !role) {
         setError("口令错了");
         return;
       }
-      saveAuth({ password, nickname: nickname.trim() });
+      saveAuth({ password, nickname: nickname.trim(), role });
       onLogin(nickname.trim());
     } catch (err) {
       setError(String(err));

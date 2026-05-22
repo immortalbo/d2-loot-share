@@ -109,6 +109,10 @@ export const CHAR_CLASSES: CharClass[] = [
   "sorceress",
 ];
 
+export type Role = "user" | "admin";
+
+export type AiReview = "approved" | "suspicious" | "skipped" | null;
+
 export interface Item {
   id: number;
   nickname: string;
@@ -121,12 +125,18 @@ export interface Item {
   // 后端存逗号分隔的字符串,前端转数组
   classes: CharClass[];
   claimed_by: string | null;
+  claimed_at: number | null;
+  deleted_at: number | null;
+  deleted_by: string | null;
+  ai_review: AiReview;
+  ai_review_reason: string | null;
   created_at: number;
   updated_at: number;
 }
 
 export interface AuthResponse {
   ok: boolean;
+  role?: Role;
   error?: string;
 }
 

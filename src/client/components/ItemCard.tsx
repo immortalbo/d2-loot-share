@@ -6,16 +6,23 @@ import {
   QUALITY_LABELS,
   type Item,
 } from "../../shared/types";
-import { claimItem, deleteItem } from "../api";
+import {
+  adminHardDeleteItem,
+  adminRestoreItem,
+  claimItem,
+  deleteItem,
+} from "../api";
 
 export function ItemCard({
   item,
   currentNickname,
+  isAdmin,
   onChanged,
   onDeleted,
 }: {
   item: Item;
   currentNickname: string;
+  isAdmin: boolean;
   onChanged: (item: Item) => void;
   onDeleted: (id: number) => void;
 }) {
@@ -23,6 +30,8 @@ export function ItemCard({
   const isOwner = item.nickname === currentNickname;
   const isClaimed = !!item.claimed_by;
   const claimedByMe = item.claimed_by === currentNickname;
+  const isDeleted = !!item.deleted_at;
+  const isSuspicious = item.ai_review === "suspicious";
 
   async function toggleClaim() {
     setBusy(true);
@@ -32,6 +41,7 @@ export function ItemCard({
       onChanged({
         ...item,
         claimed_by: next,
+        claimed_at: next ? Date.now() : null,
         updated_at: Date.now(),
       });
     } finally {
@@ -39,39 +49,80 @@ export function ItemCard({
     }
   }
 
-  async function remove() {
+  async function softDelete() {
     if (!confirm("确认删除这条?")) return;
     setBusy(true);
     try {
-      await deleteItem(item.id);
+      await deleteItem(item.id, currentNickname);
       onDeleted(item.id);
     } finally {
       setBusy(false);
     }
   }
 
-  const time = new Date(item.created_at).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  async function adminHardDelete() {
+    if (!confirm("⚠️ 这是永久删除(同时删图片),不可恢复。确认?")) return;
+    setBusy(true);
+    try {
+      await adminHardDeleteItem(item.id);
+      onDeleted(item.id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restore() {
+    setBusy(true);
+    try {
+      await adminRestoreItem(item.id);
+      onChanged({
+        ...item,
+        deleted_at: null,
+        deleted_by: null,
+        updated_at: Date.now(),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const fmt = (t: number | null | undefined) =>
+    t
+      ? new Date(t).toLocaleString("zh-CN", {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
 
   const itemNameColor = item.quality ? QUALITY_COLORS[item.quality] : undefined;
 
   return (
-    <div className={`card ${isClaimed ? "claimed" : ""}`}>
+    <div
+      className={`card ${isClaimed ? "claimed" : ""} ${
+        isDeleted ? "deleted" : ""
+      } ${isSuspicious ? "suspicious" : ""}`}
+    >
       <div className="img">
         <a href={item.image_url} target="_blank" rel="noreferrer">
           <img src={item.image_url} alt={item.item_name || "装备"} />
         </a>
+        {isSuspicious && isAdmin && (
+          <div className="badge-overlay">AI 标记可疑</div>
+        )}
       </div>
       <div className="body">
         <div className="nick">
           {item.nickname}
           {isClaimed && (
             <span className="badge" style={{ marginLeft: 8 }}>
-              {item.claimed_by} 已领走
+              {item.claimed_by} 已领
+            </span>
+          )}
+          {isDeleted && (
+            <span className="badge badge-danger" style={{ marginLeft: 8 }}>
+              已删除
             </span>
           )}
         </div>
@@ -104,17 +155,55 @@ export function ItemCard({
         </div>
 
         {item.note && <div className="note">{item.note}</div>}
+
         <div className="meta">
-          <span>{time}</span>
+          <span>发布 {fmt(item.created_at)}</span>
         </div>
+
+        {isAdmin && (
+          <div className="meta admin-meta">
+            {item.claimed_at && (
+              <span>
+                领取 {fmt(item.claimed_at)} ({item.claimed_by})
+              </span>
+            )}
+            {isDeleted && (
+              <span>
+                删除 {fmt(item.deleted_at)} ({item.deleted_by})
+              </span>
+            )}
+            {isSuspicious && (
+              <span className="ai-reason" title={item.ai_review_reason || ""}>
+                AI: {(item.ai_review_reason || "").slice(0, 60)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div className="actions">
-        <button onClick={toggleClaim} disabled={busy}>
-          {claimedByMe ? "撤销领取" : isClaimed ? "改成我要" : "我要"}
-        </button>
-        {(isOwner || claimedByMe) && (
-          <button className="danger" onClick={remove} disabled={busy}>
+        {!isDeleted && (
+          <button onClick={toggleClaim} disabled={busy}>
+            {claimedByMe ? "撤销领取" : isClaimed ? "改成我要" : "我要"}
+          </button>
+        )}
+        {!isDeleted && (isOwner || claimedByMe || isAdmin) && (
+          <button className="danger" onClick={softDelete} disabled={busy}>
             删除
+          </button>
+        )}
+        {isAdmin && isDeleted && (
+          <button onClick={restore} disabled={busy}>
+            恢复
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            className="danger"
+            onClick={adminHardDelete}
+            disabled={busy}
+            title="永久删除(连图片一起删)"
+          >
+            永久删
           </button>
         )}
       </div>

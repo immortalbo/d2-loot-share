@@ -1,16 +1,31 @@
-import type { CharClass, Item, Category, Quality } from "../shared/types";
+import type {
+  CharClass,
+  Item,
+  Category,
+  Quality,
+  Role,
+} from "../shared/types";
 
 const STORAGE_KEY = "wow-loot-share-auth";
 
 export interface AuthState {
   password: string;
   nickname: string;
+  role: Role;
 }
 
 export function loadAuth(): AuthState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AuthState) : null;
+    if (!raw) return null;
+    const data = JSON.parse(raw) as Partial<AuthState>;
+    if (!data.password || !data.nickname) return null;
+    // 老版本数据没 role,默认 user
+    return {
+      password: data.password,
+      nickname: data.nickname,
+      role: (data.role as Role) || "user",
+    };
   } catch {
     return null;
   }
@@ -29,17 +44,22 @@ async function authHeaders(): Promise<HeadersInit> {
   return a ? { Authorization: `Bearer ${a.password}` } : {};
 }
 
-export async function verifyPassword(password: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string
+): Promise<{ ok: boolean; role: Role | null }> {
   const res = await fetch("/api/auth/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password }),
   });
-  return res.ok;
+  if (!res.ok) return { ok: false, role: null };
+  const data = (await res.json()) as { ok: boolean; role?: Role };
+  return { ok: !!data.ok, role: data.role ?? null };
 }
 
-export async function fetchItems(): Promise<Item[]> {
-  const res = await fetch("/api/items", { headers: await authHeaders() });
+export async function fetchItems(includeDeleted = false): Promise<Item[]> {
+  const url = includeDeleted ? "/api/items?include=deleted" : "/api/items";
+  const res = await fetch(url, { headers: await authHeaders() });
   if (!res.ok) throw new Error(`fetchItems failed: ${res.status}`);
   const data = (await res.json()) as { items: Item[] };
   return data.items;
@@ -89,10 +109,31 @@ export async function claimItem(id: number, claimedBy: string | null) {
   if (!res.ok) throw new Error(`claim failed: ${res.status}`);
 }
 
-export async function deleteItem(id: number) {
-  const res = await fetch(`/api/items/${id}`, {
+export async function deleteItem(id: number, by: string) {
+  const res = await fetch(
+    `/api/items/${id}?by=${encodeURIComponent(by)}`,
+    {
+      method: "DELETE",
+      headers: await authHeaders(),
+    }
+  );
+  if (!res.ok) throw new Error(`delete failed: ${res.status}`);
+}
+
+// ---- admin only ----
+
+export async function adminRestoreItem(id: number) {
+  const res = await fetch(`/api/admin/items/${id}/restore`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error(`restore failed: ${res.status}`);
+}
+
+export async function adminHardDeleteItem(id: number) {
+  const res = await fetch(`/api/admin/items/${id}`, {
     method: "DELETE",
     headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error(`delete failed: ${res.status}`);
+  if (!res.ok) throw new Error(`hard delete failed: ${res.status}`);
 }

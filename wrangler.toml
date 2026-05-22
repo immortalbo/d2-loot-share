@@ -20,6 +20,10 @@ database_id = "b50b1914-a209-42c6-adc1-29c7feeaae18"
 binding = "IMAGES"
 bucket_name = "wow-loot-images"
 
-# 本地开发用 vars,生产请用 `wrangler secret put SHARE_PASSWORD`
+# Workers AI 绑定(用视觉模型审核装备截图)
+[ai]
+binding = "AI"
+
+# 本地开发用 vars,生产请用 `wrangler secret put SHARE_PASSWORD`/`ADMIN_PASSWORD`
 [vars]
 # SHARE_PASSWORD 不要在这里写,用 secret 命令存
