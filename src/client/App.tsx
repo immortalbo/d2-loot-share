@@ -178,7 +178,7 @@ export function App() {
     <div className="app">
       <div className="header">
         <h1>
-          公会装备共享
+          群友装备共享
           {isAdmin && <span className="admin-badge">ADMIN</span>}
         </h1>
         <div className="user">

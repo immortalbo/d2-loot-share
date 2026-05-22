@@ -32,7 +32,7 @@ export function Login({ onLogin }: { onLogin: (nickname: string) => void }) {
 
   return (
     <div className="login">
-      <h2>公会装备共享</h2>
+      <h2>群友装备共享</h2>
       <form onSubmit={submit}>
         <div className="field">
           <label>游戏昵称</label>
