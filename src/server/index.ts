@@ -278,6 +278,8 @@ app.post("/api/items", async (c) => {
   const file = form.get("image");
 
   if (!nickname) return c.json({ error: "nickname required" }, 400);
+  if (!category) return c.json({ error: "category required" }, 400);
+  if (!quality) return c.json({ error: "quality required" }, 400);
   if (!(file instanceof File)) return c.json({ error: "image required" }, 400);
   if (file.size > 10 * 1024 * 1024) {
     return c.json({ error: "image too large (max 10MB)" }, 400);

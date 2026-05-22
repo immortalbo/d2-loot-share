@@ -85,6 +85,11 @@ select {
   cursor: pointer;
 }
 
+select.required-empty {
+  border-color: rgba(245, 166, 35, 0.5);
+  color: var(--muted);
+}
+
 input:focus,
 textarea:focus,
 select:focus {

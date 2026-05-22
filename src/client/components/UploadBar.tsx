@@ -90,6 +90,14 @@ export function UploadBar({
       setError("先粘贴一张截图(Ctrl+V)");
       return;
     }
+    if (!category) {
+      setError("请选择装备类型");
+      return;
+    }
+    if (!quality) {
+      setError("请选择装备品质");
+      return;
+    }
     setUploading(true);
     setError(null);
     setInfo(null);
@@ -183,10 +191,11 @@ export function UploadBar({
 
       <div className="row">
         <select
+          className={!category ? "required-empty" : ""}
           value={category}
           onChange={(e) => setCategory(e.target.value as Category | "")}
         >
-          <option value="">类型(可选)</option>
+          <option value="">类型 *(必选)</option>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>
               {CATEGORY_LABELS[c]}
@@ -194,10 +203,11 @@ export function UploadBar({
           ))}
         </select>
         <select
+          className={!quality ? "required-empty" : ""}
           value={quality}
           onChange={(e) => setQuality(e.target.value as Quality | "")}
         >
-          <option value="">品质(可选)</option>
+          <option value="">品质 *(必选)</option>
           {QUALITIES.map((q) => (
             <option key={q} value={q}>
               {QUALITY_LABELS[q]}
