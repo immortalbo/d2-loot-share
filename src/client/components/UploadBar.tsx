@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createWorker, type Worker as TesseractWorker } from "tesseract.js";
 import { uploadItem } from "../api";
 import {
   CATEGORIES,
@@ -12,6 +13,23 @@ import {
   type Item,
   type Quality,
 } from "../../shared/types";
+
+// 暗黑2装备 tooltip 常见关键词(中/英),匹配上认为是装备截图
+const D2_KEYWORDS = [
+  "需要等级",
+  "等级要求",
+  "需要力量",
+  "需要敏捷",
+  "Required Level",
+  "Required Strength",
+  "Required Dexterity",
+];
+
+function hasD2Keyword(text: string): boolean {
+  return D2_KEYWORDS.some((k) =>
+    new RegExp(k.replace(/\s+/g, "\\s*"), "i").test(text)
+  );
+}
 
 export function UploadBar({
   nickname,
@@ -31,6 +49,13 @@ export function UploadBar({
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // OCR 状态
+  const workerRef = useRef<TesseractWorker | null>(null);
+  const [ocrText, setOcrText] = useState<string>("");
+  const [ocrStatus, setOcrStatus] = useState<
+    "idle" | "loading" | "recognizing" | "done" | "failed"
+  >("idle");
 
   useEffect(() => {
     if (!image) {
@@ -55,6 +80,46 @@ export function UploadBar({
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
+  // image 变化时跑 OCR
+  useEffect(() => {
+    let cancelled = false;
+    setOcrText("");
+    if (!image) {
+      setOcrStatus("idle");
+      return;
+    }
+    (async () => {
+      try {
+        if (!workerRef.current) {
+          setOcrStatus("loading");
+          workerRef.current = await createWorker("chi_sim+eng");
+        }
+        if (cancelled) return;
+        setOcrStatus("recognizing");
+        const ret = await workerRef.current.recognize(image);
+        if (cancelled) return;
+        const text = ret.data.text || "";
+        setOcrText(text);
+        setOcrStatus("done");
+      } catch (err) {
+        if (cancelled) return;
+        setOcrText(`OCR 失败: ${String(err).slice(0, 100)}`);
+        setOcrStatus("failed");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [image]);
+
+  // 卸载时关闭 worker
+  useEffect(() => {
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
   }, []);
 
   function onDrop(e: React.DragEvent) {
@@ -88,6 +153,7 @@ export function UploadBar({
         quality: quality || null,
         classes,
         image,
+        ocr_text: ocrText || undefined,
       });
       onUploaded(item);
       setImage(null);
@@ -96,12 +162,17 @@ export function UploadBar({
       setCategory("");
       setQuality("");
       setClasses([]);
+      setOcrText("");
+      setOcrStatus("idle");
     } catch (err) {
       setError(String(err));
     } finally {
       setUploading(false);
     }
   }
+
+  const ocrPassed = ocrStatus === "done" && hasD2Keyword(ocrText);
+  const ocrFailed = ocrStatus === "done" && !ocrPassed;
 
   return (
     <div
@@ -135,6 +206,22 @@ export function UploadBar({
       </div>
 
       {previewUrl && <img className="preview" src={previewUrl} alt="预览" />}
+
+      {image && (
+        <div className={`ocr-box ${ocrPassed ? "pass" : ocrFailed ? "fail" : ""}`}>
+          {ocrStatus === "loading" && "正在加载文字识别引擎(首次约 5-10 秒,之后缓存)..."}
+          {ocrStatus === "recognizing" && "正在识别图中文字..."}
+          {ocrStatus === "done" && ocrPassed && (
+            <>✓ 检测到装备特征(命中关键词)</>
+          )}
+          {ocrStatus === "done" && !ocrPassed && (
+            <>⚠ 未检测到装备特征,管理员会看到「可疑」标记</>
+          )}
+          {ocrStatus === "failed" && (
+            <>OCR 失败,会跳过审核(管理员会看到标记)</>
+          )}
+        </div>
+      )}
 
       <div className="row">
         <input

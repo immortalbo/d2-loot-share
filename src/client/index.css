@@ -479,3 +479,24 @@ select:focus {
   font-style: italic;
 }
 
+.ocr-box {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.ocr-box.pass {
+  background: rgba(76, 175, 80, 0.1);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: var(--success);
+}
+
+.ocr-box.fail {
+  background: rgba(255, 140, 42, 0.1);
+  border-color: rgba(255, 140, 42, 0.4);
+  color: #ff8c2a;
+}
+

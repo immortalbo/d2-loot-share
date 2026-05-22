@@ -93,34 +93,41 @@ app.get("/api/items", async (c) => {
   return c.json({ items: results.map((r) => shapeItem(r, origin)) });
 });
 
-// AI 视觉审核
-async function reviewImage(
-  ai: Ai,
-  bytes: Uint8Array
-): Promise<{ ok: boolean; reason: string }> {
-  try {
-    const prompt = [
-      "You are reviewing an image upload for a Diablo 2 Resurrected guild loot-sharing site.",
-      "Only ACCEPT images that show Diablo 2 in-game content: item tooltips, equipment, inventory, stash, trade window, or character screen.",
-      "REJECT screenshots of unrelated content (selfies, anime art, other games, memes, chat screenshots, random photos).",
-      "Answer strictly in this format: 'YES: <one-line reason>' or 'NO: <one-line reason>'.",
-    ].join(" ");
+// 暗黑2装备 tooltip 关键词(中/英),前端 OCR 文字命中即视为装备
+const D2_KEYWORDS = [
+  "需要等级",
+  "等级要求",
+  "需要力量",
+  "需要敏捷",
+  "Required Level",
+  "Required Strength",
+  "Required Dexterity",
+];
 
-    const response = (await ai.run("@cf/llava-hf/llava-1.5-7b-hf", {
-      image: [...bytes],
-      prompt,
-      max_tokens: 120,
-    } as any)) as { description?: string };
-
-    const desc = (response.description || "").trim();
-    const isYes = /^\s*yes/i.test(desc);
-    return { ok: isYes, reason: desc.slice(0, 300) || "no description" };
-  } catch (err) {
+function reviewByOcrText(ocrText: string): {
+  ok: boolean;
+  reason: string;
+} {
+  if (!ocrText) {
+    return { ok: false, reason: "OCR text empty (client may have skipped)" };
+  }
+  const matched = D2_KEYWORDS.find((k) =>
+    new RegExp(k.replace(/\s+/g, "\\s*"), "i").test(ocrText)
+  );
+  if (matched) {
     return {
       ok: true,
-      reason: `AI review skipped: ${String(err).slice(0, 200)}`,
+      reason: `OCR keyword matched: "${matched}". Text: ${ocrText
+        .replace(/\s+/g, " ")
+        .slice(0, 120)}`,
     };
   }
+  return {
+    ok: false,
+    reason: `OCR text has no D2 keyword. Text: ${ocrText
+      .replace(/\s+/g, " ")
+      .slice(0, 200)}`,
+  };
 }
 
 // 上传装备截图
@@ -132,6 +139,7 @@ app.post("/api/items", async (c) => {
   const category = String(form.get("category") || "").trim() || null;
   const quality = String(form.get("quality") || "").trim() || null;
   const classes = String(form.get("classes") || "").trim() || null;
+  const ocrText = String(form.get("ocr_text") || "").trim();
   const file = form.get("image");
 
   if (!nickname) return c.json({ error: "nickname required" }, 400);
@@ -141,7 +149,7 @@ app.post("/api/items", async (c) => {
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const review = await reviewImage(c.env.AI, bytes);
+  const review = reviewByOcrText(ocrText);
   const ai_review = review.ok ? "approved" : "suspicious";
   const ai_review_reason = review.reason;
 

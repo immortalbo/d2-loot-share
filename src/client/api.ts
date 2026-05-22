@@ -73,6 +73,7 @@ export async function uploadItem(input: {
   quality?: Quality | null;
   classes?: CharClass[];
   image: Blob;
+  ocr_text?: string;
 }): Promise<Item> {
   const fd = new FormData();
   fd.set("nickname", input.nickname);
@@ -82,6 +83,7 @@ export async function uploadItem(input: {
   if (input.quality) fd.set("quality", input.quality);
   if (input.classes && input.classes.length > 0)
     fd.set("classes", input.classes.join(","));
+  if (input.ocr_text) fd.set("ocr_text", input.ocr_text);
   fd.set("image", input.image, "screenshot.png");
 
   const res = await fetch("/api/items", {
