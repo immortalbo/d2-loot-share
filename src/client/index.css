@@ -511,3 +511,130 @@ select:focus {
   color: #ff8c2a;
 }
 
+/* ============ 移动端适配 ============ */
+@media (max-width: 720px) {
+  .app {
+    padding: 12px;
+  }
+
+  /* 顶部:标题和按钮换行 */
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
+  .header h1 {
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .header .user {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* 登录页 */
+  .login {
+    margin: 30px auto;
+    padding: 20px;
+  }
+
+  /* 上传区:装备名/备注 / 类型/品质 各占一行 */
+  .upload-bar {
+    padding: 12px;
+    gap: 8px;
+  }
+  .upload-bar .row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .upload-bar .row > * {
+    min-width: 0;
+    width: 100%;
+  }
+  .upload-bar .preview {
+    max-height: 220px;
+    width: 100%;
+    object-fit: contain;
+  }
+  .class-chips {
+    gap: 4px;
+  }
+  .chip {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  /* tab 行支持横向滚动,不换行 */
+  .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tab {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* 筛选栏每项 100% */
+  .filter-bar {
+    gap: 6px;
+  }
+  .filter-bar select,
+  .filter-bar .filter-input {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    width: auto;
+  }
+  .filter-bar button {
+    flex: 1 1 100%;
+  }
+
+  /* 卡片网格:每排 1-2 张 */
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .card .actions {
+    flex-wrap: wrap;
+    padding: 0 10px 10px;
+  }
+  .card .actions button {
+    flex: 1 1 calc(50% - 3px);
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+
+  /* 输入框在 iOS 小于 16px 会触发缩放,避免 */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  .empty {
+    padding: 40px 12px;
+  }
+}
+
+/* 极小屏(≤ 380px):单列卡片更舒服 */
+@media (max-width: 420px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .card .img {
+    max-height: 260px;
+  }
+}
+
