@@ -25,6 +25,7 @@ type ItemRow = {
   deleted_by: string | null;
   ai_review: string | null;
   ai_review_reason: string | null;
+  ip_address: string | null;
   created_at: number;
   updated_at: number;
 };
@@ -55,11 +56,18 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
-function shapeItem(row: ItemRow, origin: string) {
+function shapeItem(row: ItemRow, origin: string, role: Role) {
+  // 普通用户不暴露 IP 和 AI 审核理由(可能含敏感的 OCR 内容)
+  const stripped =
+    role === "admin"
+      ? row
+      : { ...row, ip_address: null, ai_review_reason: null };
   return {
-    ...row,
-    classes: row.classes ? row.classes.split(",").filter(Boolean) : [],
-    image_url: `${origin}/img/${encodeURIComponent(row.image_key)}`,
+    ...stripped,
+    classes: stripped.classes
+      ? stripped.classes.split(",").filter(Boolean)
+      : [],
+    image_url: `${origin}/img/${encodeURIComponent(stripped.image_key)}`,
   };
 }
 
@@ -78,19 +86,26 @@ app.post("/api/auth/verify", async (c) => {
   return c.json({ ok: false, error: "wrong password" }, 401);
 });
 
-// 列出装备(普通用户:仅未删除;admin:可选 include=deleted 看全部)
+// 列出装备
+// - 普通用户:只看到未删除 且 (ai_review != 'suspicious')
+// - admin:?include=deleted 时看全部,否则只看未删除(但能看到 suspicious)
 app.get("/api/items", async (c) => {
-  const role = c.get("role");
-  const includeDeleted =
-    role === "admin" && c.req.query("include") === "deleted";
+  const role = c.get("role") as Role;
 
-  const sql = includeDeleted
-    ? "SELECT * FROM items ORDER BY created_at DESC LIMIT 1000"
-    : "SELECT * FROM items WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 500";
+  let sql: string;
+  if (role === "admin") {
+    sql =
+      c.req.query("include") === "deleted"
+        ? "SELECT * FROM items ORDER BY created_at DESC LIMIT 1000"
+        : "SELECT * FROM items WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 1000";
+  } else {
+    sql =
+      "SELECT * FROM items WHERE deleted_at IS NULL AND (ai_review IS NULL OR ai_review != 'suspicious') ORDER BY created_at DESC LIMIT 500";
+  }
 
   const { results } = await c.env.DB.prepare(sql).all<ItemRow>();
   const origin = new URL(c.req.url).origin;
-  return c.json({ items: results.map((r) => shapeItem(r, origin)) });
+  return c.json({ items: results.map((r) => shapeItem(r, origin, role)) });
 });
 
 // 暗黑2装备 tooltip 关键词(中/英),前端 OCR 文字命中即视为装备
@@ -153,6 +168,12 @@ app.post("/api/items", async (c) => {
   const ai_review = review.ok ? "approved" : "suspicious";
   const ai_review_reason = review.reason;
 
+  // Cloudflare 自动注入真实客户端 IP
+  const ip =
+    c.req.header("CF-Connecting-IP") ||
+    c.req.header("X-Forwarded-For")?.split(",")[0].trim() ||
+    null;
+
   const ext = (file.type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
   const key = `items/${Date.now()}-${crypto.randomUUID()}.${ext}`;
   await c.env.IMAGES.put(key, bytes, {
@@ -163,8 +184,8 @@ app.post("/api/items", async (c) => {
   const result = await c.env.DB.prepare(
     `INSERT INTO items
        (nickname, item_name, note, image_key, category, quality, classes,
-        ai_review, ai_review_reason, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ai_review, ai_review_reason, ip_address, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       nickname,
@@ -176,6 +197,7 @@ app.post("/api/items", async (c) => {
       classes,
       ai_review,
       ai_review_reason,
+      ip,
       now,
       now
     )
@@ -188,7 +210,8 @@ app.post("/api/items", async (c) => {
 
   if (!row) return c.json({ error: "insert failed" }, 500);
   const origin = new URL(c.req.url).origin;
-  return c.json({ item: shapeItem(row, origin) });
+  // 返回给上传者:让前端能根据 ai_review 给用户「需要审核」提示。普通用户也保留 ai_review 字段
+  return c.json({ item: shapeItem(row, origin, c.get("role") as Role) });
 });
 
 // 标记领取
@@ -218,6 +241,20 @@ app.delete("/api/items/:id", async (c) => {
 });
 
 // ---- 管理员接口 ----
+
+// 把可疑条目批准展示给所有人(ai_review: suspicious -> approved)
+app.post("/api/admin/items/:id/approve", async (c) => {
+  if (c.get("role") !== "admin")
+    return c.json({ error: "admin only" }, 403);
+  const id = Number(c.req.param("id"));
+  const now = Date.now();
+  await c.env.DB.prepare(
+    "UPDATE items SET ai_review = 'approved', ai_review_reason = COALESCE(ai_review_reason, '') || ' [admin approved]', updated_at = ? WHERE id = ?"
+  )
+    .bind(now, id)
+    .run();
+  return c.json({ ok: true });
+});
 
 app.post("/api/admin/items/:id/restore", async (c) => {
   if (c.get("role") !== "admin")

@@ -130,6 +130,8 @@ export interface Item {
   deleted_by: string | null;
   ai_review: AiReview;
   ai_review_reason: string | null;
+  // 仅管理员可见(普通用户响应里为 null)
+  ip_address: string | null;
   created_at: number;
   updated_at: number;
 }

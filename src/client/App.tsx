@@ -49,6 +49,8 @@ export function App() {
   const [filterCategory, setFilterCategory] = useState<Category | "">("");
   const [filterQuality, setFilterQuality] = useState<Quality | "">("");
   const [filterClass, setFilterClass] = useState<CharClass | "">("");
+  const [filterNickname, setFilterNickname] = useState("");
+  const [filterIp, setFilterIp] = useState("");
 
   const isAdmin = auth?.role === "admin";
 
@@ -110,9 +112,30 @@ export function App() {
       if (filterQuality && it.quality !== filterQuality) return false;
       if (filterClass && !it.classes.includes(filterClass)) return false;
 
+      // admin 专属筛选:昵称 / IP(子串匹配,不区分大小写)
+      if (
+        filterNickname &&
+        !it.nickname.toLowerCase().includes(filterNickname.toLowerCase())
+      )
+        return false;
+      if (
+        filterIp &&
+        !(it.ip_address || "").toLowerCase().includes(filterIp.toLowerCase())
+      )
+        return false;
+
       return true;
     });
-  }, [items, auth, tab, filterCategory, filterQuality, filterClass]);
+  }, [
+    items,
+    auth,
+    tab,
+    filterCategory,
+    filterQuality,
+    filterClass,
+    filterNickname,
+    filterIp,
+  ]);
 
   // 统计每个 tab 的数量
   const counts = useMemo(() => {
@@ -224,12 +247,30 @@ export function App() {
             </option>
           ))}
         </select>
-        {hasFilter && (
+        {isAdmin && (
+          <>
+            <input
+              className="filter-input"
+              placeholder="筛选昵称"
+              value={filterNickname}
+              onChange={(e) => setFilterNickname(e.target.value)}
+            />
+            <input
+              className="filter-input"
+              placeholder="筛选 IP"
+              value={filterIp}
+              onChange={(e) => setFilterIp(e.target.value)}
+            />
+          </>
+        )}
+        {(hasFilter || filterNickname || filterIp) && (
           <button
             onClick={() => {
               setFilterCategory("");
               setFilterQuality("");
               setFilterClass("");
+              setFilterNickname("");
+              setFilterIp("");
             }}
           >
             清除筛选

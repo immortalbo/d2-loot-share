@@ -124,6 +124,14 @@ export async function deleteItem(id: number, by: string) {
 
 // ---- admin only ----
 
+export async function adminApproveItem(id: number) {
+  const res = await fetch(`/api/admin/items/${id}/approve`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error(`approve failed: ${res.status}`);
+}
+
 export async function adminRestoreItem(id: number) {
   const res = await fetch(`/api/admin/items/${id}/restore`, {
     method: "POST",

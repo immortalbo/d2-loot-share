@@ -47,6 +47,7 @@ export function UploadBar({
   const [classes, setClasses] = useState<CharClass[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,6 +145,7 @@ export function UploadBar({
     }
     setUploading(true);
     setError(null);
+    setInfo(null);
     try {
       const item = await uploadItem({
         nickname,
@@ -164,6 +166,15 @@ export function UploadBar({
       setClasses([]);
       setOcrText("");
       setOcrStatus("idle");
+
+      if (item.ai_review === "suspicious") {
+        setInfo(
+          "已提交,但 OCR 未在图中检测到装备特征,可能不是装备截图,需要管理员审核后才会展示给其他人。"
+        );
+      } else {
+        setInfo("提交成功 ✓");
+      }
+      setTimeout(() => setInfo(null), 8000);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -285,6 +296,7 @@ export function UploadBar({
         </button>
       </div>
 
+      {info && <div className="info">{info}</div>}
       {error && <div className="error">{error}</div>}
     </div>
   );

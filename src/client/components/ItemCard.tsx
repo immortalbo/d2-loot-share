@@ -7,6 +7,7 @@ import {
   type Item,
 } from "../../shared/types";
 import {
+  adminApproveItem,
   adminHardDeleteItem,
   adminRestoreItem,
   claimItem,
@@ -79,6 +80,20 @@ export function ItemCard({
         ...item,
         deleted_at: null,
         deleted_by: null,
+        updated_at: Date.now(),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve() {
+    setBusy(true);
+    try {
+      await adminApproveItem(item.id);
+      onChanged({
+        ...item,
+        ai_review: "approved",
         updated_at: Date.now(),
       });
     } finally {
@@ -162,6 +177,11 @@ export function ItemCard({
 
         {isAdmin && (
           <div className="meta admin-meta">
+            {item.ip_address && (
+              <span>
+                IP <code>{item.ip_address}</code>
+              </span>
+            )}
             {item.claimed_at && (
               <span>
                 领取 {fmt(item.claimed_at)} ({item.claimed_by})
@@ -174,7 +194,7 @@ export function ItemCard({
             )}
             {isSuspicious && (
               <span className="ai-reason" title={item.ai_review_reason || ""}>
-                AI: {(item.ai_review_reason || "").slice(0, 60)}
+                OCR: {(item.ai_review_reason || "").slice(0, 80)}
               </span>
             )}
           </div>
@@ -189,6 +209,15 @@ export function ItemCard({
         {!isDeleted && (isOwner || claimedByMe || isAdmin) && (
           <button className="danger" onClick={softDelete} disabled={busy}>
             删除
+          </button>
+        )}
+        {isAdmin && isSuspicious && !isDeleted && (
+          <button
+            onClick={approve}
+            disabled={busy}
+            title="把这条标记为已审核,普通用户就能看到了"
+          >
+            展示给所有人
           </button>
         )}
         {isAdmin && isDeleted && (

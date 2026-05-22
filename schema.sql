@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS items (
   deleted_by TEXT,
   ai_review TEXT,
   ai_review_reason TEXT,
+  ip_address TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -22,3 +23,4 @@ CREATE INDEX IF NOT EXISTS idx_items_nickname ON items (nickname);
 CREATE INDEX IF NOT EXISTS idx_items_category ON items (category);
 CREATE INDEX IF NOT EXISTS idx_items_deleted_at ON items (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_items_ai_review ON items (ai_review);
+CREATE INDEX IF NOT EXISTS idx_items_ip_address ON items (ip_address);
