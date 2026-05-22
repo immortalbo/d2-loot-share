@@ -28,7 +28,8 @@ export type CharClass =
   | "druid"
   | "paladin"
   | "necromancer"
-  | "sorceress";
+  | "sorceress"
+  | "warlock";
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   weapon: "武器",
@@ -72,6 +73,7 @@ export const CHAR_CLASS_LABELS: Record<CharClass, string> = {
   paladin: "圣骑士",
   necromancer: "死灵",
   sorceress: "法师",
+  warlock: "术士",
 };
 
 export const CATEGORIES: Category[] = [
@@ -107,6 +109,7 @@ export const CHAR_CLASSES: CharClass[] = [
   "paladin",
   "necromancer",
   "sorceress",
+  "warlock",
 ];
 
 export type Role = "user" | "admin";
